@@ -1,0 +1,36 @@
+2026-10-05 07:32:53 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 07:32:53 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 07:33:32 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 07:33:32 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 07:33:38 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 07:33:38 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 07:33:40 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 07:33:40 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 07:33:46 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 07:33:46 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 21:34:39 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]
+2026-10-05 21:34:39 jdbc[3]: exception
+org.h2.jdbc.JdbcSQLDataException: Ошибка преобразования данных при конвертации "BIGINT to JAVA_OBJECT"
+Data conversion error converting "BIGINT to JAVA_OBJECT" [22018-214]

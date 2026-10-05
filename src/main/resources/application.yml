@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: neutral-delete-deadlock-lab
+  profiles:
+    active: h2
+
+logging:
+  level:
+    edu.diploma.deadlocklab: DEBUG
+
+deadlock-lab:
+  delete:
+    use-subject-delete-lock: false
+    default-pause-ms: 0
+
+
+
+
+
+
+
+

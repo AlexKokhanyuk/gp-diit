@@ -1,0 +1,20 @@
+spring:
+  datasource:
+    url: jdbc:sqlserver://localhost:14333;databaseName=deadlock_lab;encrypt=false;trustServerCertificate=true
+    username: sa
+    password: Your_strong_password_123
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+  h2:
+    console:
+      enabled: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/mssql
+
+
+
+
+
+
+
+

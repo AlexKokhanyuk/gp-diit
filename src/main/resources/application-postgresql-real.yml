@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:5432/ibank?charSet=WIN&currentSchema=deadlock_lab
+    username: dev1
+    password: owner
+    driver-class-name: org.postgresql.Driver
+  h2:
+    console:
+      enabled: false
+  flyway:
+    enabled: true
+    schemas: deadlock_lab
+    default-schema: deadlock_lab
+    locations: classpath:db/migration/postgresql

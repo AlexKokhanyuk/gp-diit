@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:sqlserver://192.168.88.91:1433;databaseName=deadlock_lab;encrypt=false;trustServerCertificate=true
+    username: deadlock_lab_user
+    password: deadlock_lab_2026
+    driver-class-name: com.microsoft.sqlserver.jdbc.SQLServerDriver
+  h2:
+    console:
+      enabled: false
+  flyway:
+    enabled: true
+    schemas: lab
+    default-schema: lab
+    locations: classpath:db/migration/mssql

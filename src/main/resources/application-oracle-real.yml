@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:oracle:thin:@192.168.88.91:1521/orclpdb
+    username: DEADLOCK_LAB
+    password: deadlock_lab_2026
+    driver-class-name: oracle.jdbc.OracleDriver
+  h2:
+    console:
+      enabled: false
+  flyway:
+    enabled: true
+    schemas: DEADLOCK_LAB
+    default-schema: DEADLOCK_LAB
+    locations: classpath:db/migration/oracle

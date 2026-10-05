@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Subject Deletion Deadlock Lab</title>
+  <style>
+    :root {
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --panel-2: #eef2f7;
+      --text: #1d2430;
+      --muted: #647083;
+      --line: #d9e0ea;
+      --accent: #0f766e;
+      --accent-dark: #115e59;
+      --danger: #b42318;
+      --ok: #067647;
+      --warn: #b54708;
+      --mono: Consolas, "Liberation Mono", monospace;
+      --sans: Inter, "Segoe UI", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { max-width: 100%; overflow-x: hidden; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--text);
+      background: var(--bg);
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--line);
+      background: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      max-width: 100%;
+    }
+
+    h1 { margin: 0; font-size: 20px; font-weight: 650; }
+    h2 { margin: 0 0 14px; font-size: 16px; }
+    h3 { margin: 16px 0 8px; font-size: 14px; color: var(--muted); }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(300px, 420px) minmax(0, 1fr);
+      gap: 18px;
+      padding: 18px;
+      width: 100%;
+      max-width: 100%;
+      overflow-x: hidden;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      min-width: 0;
+    }
+
+    .stack { display: grid; gap: 14px; min-width: 0; }
+    .controls { display: grid; gap: 10px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    .table-controls { display: grid; grid-template-columns: minmax(160px, 1fr) 110px auto; gap: 10px; align-items: end; }
+
+    label { display: grid; gap: 5px; font-size: 12px; color: var(--muted); }
+    input, select, textarea {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+    }
+    textarea { min-height: 76px; resize: vertical; font-family: var(--mono); }
+
+    button {
+      min-height: 36px;
+      border: 1px solid var(--accent);
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+    button.secondary { background: #fff; color: var(--accent); }
+    button.secondary:hover { background: #e6fffb; }
+    button.danger { background: var(--danger); border-color: var(--danger); }
+
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-width: 0; }
+    .app-title { min-width: 220px; }
+    .panel-title { align-items: center; margin-bottom: 14px; }
+    .panel-title h2 { margin: 0; }
+    .status { color: var(--muted); font-size: 13px; }
+    .db-banner {
+      display: grid;
+      gap: 4px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fafc;
+      min-width: 0;
+      width: min(760px, 46vw);
+      max-width: 100%;
+    }
+    .db-line { font-size: 13px; color: var(--text); font-weight: 650; }
+    .db-detail { font-size: 12px; color: var(--muted); font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hint { color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .metric-grid { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fff;
+    }
+    .metric .value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+    .metric .label { color: var(--muted); font-size: 12px; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 12px; font-weight: 650; background: var(--panel-2); }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .table-wrap { max-height: 330px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; max-width: 100%; }
+
+    .log {
+      height: 300px;
+      overflow: auto;
+      background: #101828;
+      color: #e6edf6;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      max-width: 100%;
+    }
+    .pill { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border-radius: 999px; font-size: 12px; background: var(--panel-2); color: var(--muted); }
+    #seedDbBadge { max-width: 230px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ok { color: var(--ok); font-weight: 650; }
+    .bad { color: var(--danger); font-weight: 650; }
+    .warn { color: var(--warn); font-weight: 650; }
+    .error-cell { min-width: 360px; white-space: normal; overflow-wrap: anywhere; }
+    #relationships { overflow-wrap: anywhere; }
+
+    @media (max-width: 980px) {
+      header { align-items: flex-start; flex-direction: column; }
+      main { grid-template-columns: 1fr; }
+      .metric-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+      .db-banner { width: 100%; }
+      .table-controls { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="app-title">
+    <h1>Subject Deletion Deadlock Lab</h1>
+    <div class="status" id="status">Готово</div>
+  </div>
+  <div class="toolbar">
+    <span class="pill">API /lab/*</span>
+    <div class="db-banner" id="dbBanner"><div class="db-line">DB: loading...</div><div class="db-detail">-</div></div>
+    <button class="secondary" id="refreshBtn">Refresh stats</button>
+  </div>
+</header>
+
+<main>
+  <section class="stack">
+    <div class="panel">
+      <div class="toolbar panel-title"><h2>Seed Data</h2><span class="pill" id="seedDbBadge">DB: -</span></div>
+      <div class="controls">
+        <div class="row-3">
+          <label>Subjects<input id="seedSubjects" type="number" min="1" value="10"></label>
+          <label>Fanout<input id="seedFanout" type="number" min="1" value="5"></label>
+          <label>Reset<select id="seedReset"><option value="true">true</option><option value="false">false</option></select></label>
+        </div>
+        <div class="toolbar">
+          <button id="seedBtn">Create Test Data</button>
+          <button class="secondary" id="mssqlStressPresetBtn">Deadlock preset</button>
+        </div>
+        <div class="hint" id="presetHint">Preset is tuned for deadlock experiments.</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Single Delete</h2>
+      <div class="controls">
+        <label>Subject ID<input id="singleSubjectId" type="number" placeholder="329990"></label>
+        <button class="danger" id="singleDeleteBtn">Delete Subject</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Parallel Delete</h2>
+      <div class="controls">
+        <label>Subject IDs<textarea id="parallelIds" placeholder="1001,1002,1003"></textarea></label>
+        <div class="row">
+          <label>Threads<input id="parallelThreads" type="number" min="1" value="3"></label>
+        </div>
+        <button class="danger" id="parallelDeleteBtn">Run Parallel Delete</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="stack">
+    <div class="panel">
+      <h2>Database Snapshot</h2>
+      <div class="metric-grid">
+        <div class="metric"><div class="label">Subjects</div><div class="value" id="mSubjects">-</div></div>
+        <div class="metric"><div class="label">Total Rows</div><div class="value" id="mRows">-</div></div>
+        <div class="metric"><div class="label">First Subject</div><div class="value" id="mFirst">-</div></div>
+        <div class="metric"><div class="label">Last Subject</div><div class="value" id="mLast">-</div></div>
+      </div>
+      <h3>Table Counts</h3>
+      <div class="table-wrap"><table><thead><tr><th>Table</th><th>Rows</th></tr></thead><tbody id="tableCounts"></tbody></table></div>
+    </div>
+
+    <div class="panel">
+      <h2>Table Viewer</h2>
+      <div class="controls">
+        <div class="table-controls">
+          <label>Table<select id="tableSelect"></select></label>
+          <label>Limit<input id="tableLimit" type="number" min="1" max="500" value="50"></label>
+          <button id="loadTableBtn" type="button">Load Table</button>
+        </div>
+        <div class="table-wrap"><table><thead id="tableViewHead"></thead><tbody id="tableViewBody"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Last Operation</h2>
+      <div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th>Failed Step</th><th>Duration</th><th>Error</th></tr></thead><tbody id="resultsBody"></tbody></table></div>
+    </div>
+
+    <div class="panel">
+      <h2>Relationships</h2>
+      <div id="relationships" class="status">-</div>
+    </div>
+
+    <div class="panel">
+      <h2>Raw Output</h2>
+      <div class="log" id="log"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let lastSubjectIds = [];
+  let tableStats = [];
+
+  function setStatus(text) { $('status').textContent = text; }
+  function log(title, data) {
+    const now = new Date().toLocaleTimeString();
+    $('log').textContent = `[${now}] ${title}\n${JSON.stringify(data, null, 2)}\n\n` + $('log').textContent;
+  }
+  function params(obj) {
+    const p = new URLSearchParams();
+    Object.keys(obj).forEach(k => {
+      if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') p.set(k, obj[k]);
+    });
+    return p.toString();
+  }
+  async function request(url, options) {
+    setStatus('Запит виконується...');
+    const res = await fetch(url, options || {});
+    const text = await res.text();
+    let body;
+    try { body = text ? JSON.parse(text) : null; } catch (e) { body = text; }
+    if (!res.ok) {
+      const error = new Error(`HTTP ${res.status}`);
+      error.body = body;
+      throw error;
+    }
+    setStatus('Готово');
+    return body;
+  }
+
+  async function refreshStats() {
+    const stats = await request('/lab/stats');
+    $('mSubjects').textContent = stats.subjectCount ?? 0;
+    $('mRows').textContent = stats.totalRows ?? 0;
+    $('mFirst').textContent = stats.firstSubjectId ?? '-';
+    $('mLast').textContent = stats.lastSubjectId ?? '-';
+    tableStats = stats.tables || [];
+    lastSubjectIds = stats.subjectIds || [];
+    $('parallelIds').value = lastSubjectIds.join(',');
+    $('singleSubjectId').value = lastSubjectIds[0] || '';
+    $('tableCounts').innerHTML = tableStats
+      .filter(x => x.rows > 0)
+      .map(x => `<tr><td>${escapeHtml(x.table)}</td><td class="num">${x.rows}</td></tr>`).join('') || '<tr><td colspan="2">No rows</td></tr>';
+    renderTableSelect(tableStats);
+    log('stats', stats);
+  }
+
+  function renderEnvironment(env) {
+    const profiles = (env.activeProfiles || []).join(', ') || 'default';
+    const product = env.databaseProductName || 'unknown database';
+    const version = env.databaseProductVersion || '';
+    const user = env.userName || '-';
+    const jdbcUrl = env.jdbcUrl || '-';
+    const isMssql = product.toLowerCase().includes('sql server') || profiles.includes('mssql');
+
+    $('dbBanner').innerHTML = `
+      <div class="db-line">DB: ${escapeHtml(product)} · profile: ${escapeHtml(profiles)}</div>
+      <div class="db-detail">${escapeHtml(user)} · ${escapeHtml(jdbcUrl)}</div>`;
+    $('seedDbBadge').textContent = `DB: ${product} / ${profiles}`;
+    $('presetHint').textContent = isMssql
+      ? 'Preset is tuned for the current Microsoft SQL Server deadlock experiment.'
+      : 'Preset is tuned for Microsoft SQL Server; current DB can behave differently.';
+    log('environment', env);
+  }
+
+  async function loadEnvironment() {
+    const env = await request('/lab/environment');
+    renderEnvironment(env);
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  function renderTableSelect(tables) {
+    const current = $('tableSelect').value;
+    const nonEmpty = tables.find(x => x.rows > 0);
+    const selected = tables.some(x => x.table === current) ? current : (nonEmpty ? nonEmpty.table : 'subjects');
+    $('tableSelect').innerHTML = tables
+      .map(x => `<option value="${escapeHtml(x.table)}">${escapeHtml(x.table)} (${x.rows})</option>`)
+      .join('');
+    $('tableSelect').value = selected;
+  }
+
+  function renderTableView(data) {
+    const columns = data.columns || [];
+    const rows = data.rows || [];
+    $('tableViewHead').innerHTML = '<tr>' + columns.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '</tr>';
+    $('tableViewBody').innerHTML = rows.map(row => '<tr>' + columns
+      .map(c => `<td>${escapeHtml(row[c])}</td>`)
+      .join('') + '</tr>').join('') || `<tr><td colspan="${Math.max(1, columns.length)}">No rows</td></tr>`;
+  }
+
+  async function loadTableView() {
+    const table = $('tableSelect').value;
+    if (!table) {
+      setStatus('Немає таблиці для перегляду. Натисни Refresh stats.');
+      return;
+    }
+    const limit = $('tableLimit').value || 50;
+    const data = await request('/lab/table/' + encodeURIComponent(table) + '?' + params({ limit }));
+    renderTableView(data);
+    log('table ' + table, data);
+  }
+  async function loadRelationships() {
+    const data = await request('/lab/relationships');
+    $('relationships').innerHTML = `
+      <div><b>Children:</b> ${(data.subjectChildren || []).join(', ')}</div>
+      <div><b>Hotspots:</b> ${(data.hotspots || []).join(', ')}</div>
+      <div><b>Document tables:</b> ${(data.documentTables || []).join(', ')}</div>`;
+  }
+
+  function renderResults(data) {
+    const rows = Array.isArray(data) ? data : [data];
+    $('resultsBody').innerHTML = rows.map(item => {
+      const r = typeof item === 'string' ? { success: false, error: item } : (item || {});
+      const error = r.error || r.message || r.detail || r.body?.error || r.body?.message || '-';
+      return `
+      <tr>
+        <td>${escapeHtml(r.subjectId ?? '-')}</td>
+        <td class="${r.success ? 'ok' : 'bad'}">${r.success ? 'OK' : 'FAILED'}</td>
+        <td>${escapeHtml(r.failedStep || '-')}</td>
+        <td>${escapeHtml(r.duration || '-')}</td>
+        <td class="error-cell">${escapeHtml(error)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  function parseIds(value) {
+    return value.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean).map(Number).filter(Number.isFinite);
+  }
+
+  $('mssqlStressPresetBtn').onclick = () => {
+    $('seedSubjects').value = 24;
+    $('seedFanout').value = 120;
+    $('seedReset').value = 'true';
+    $('parallelThreads').value = 12;
+    setStatus('MS preset виставлено. Натисни Create Test Data, потім Run Parallel Delete.');
+  };
+  $('seedBtn').onclick = async () => {
+    try {
+      const q = params({ subjects: $('seedSubjects').value, fanout: $('seedFanout').value, reset: $('seedReset').value });
+      const data = await request('/lab/seed?' + q, { method: 'POST' });
+      lastSubjectIds = data.subjectIds || [];
+      log('seed', data);
+      await refreshStats();
+    } catch (e) { setStatus(e.message); log('seed failed', e.body || e.message); }
+  };
+
+  $('singleDeleteBtn').onclick = async () => {
+    try {
+      const id = $('singleSubjectId').value;
+      const data = await request('/lab/subjects/' + encodeURIComponent(id), { method: 'DELETE' });
+      renderResults(data);
+      log('single delete', data);
+      await refreshStats();
+    } catch (e) { setStatus(e.message); renderResults(e.body || {}); log('single delete failed', e.body || e.message); await refreshStats(); }
+  };
+
+  async function deleteSubjectRequest(id) {
+    try {
+      return await request('/lab/subjects/' + encodeURIComponent(id), { method: 'DELETE' });
+    } catch (e) {
+      return e.body || { subjectId: id, success: false, error: e.message };
+    }
+  }
+
+  async function runWithConcurrency(items, limit, worker) {
+    const results = new Array(items.length);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (next < items.length) {
+        const index = next++;
+        results[index] = await worker(items[index]);
+      }
+    });
+    await Promise.all(workers);
+    return results;
+  }
+
+  $('parallelDeleteBtn').onclick = async () => {
+    const ids = parseIds($('parallelIds').value);
+    const threads = Math.max(1, Number($('parallelThreads').value) || ids.length || 1);
+    try {
+      setStatus(`Виконується ${ids.length} окремих DELETE-запитів з фронта...`);
+      const data = await runWithConcurrency(ids, threads, id => deleteSubjectRequest(id));
+      renderResults(data);
+      log('parallel delete via separate frontend requests', data);
+      await refreshStats();
+    } catch (e) { setStatus(e.message); log('parallel delete failed', e.body || e.message); await refreshStats(); }
+  };
+
+  $('refreshBtn').onclick = refreshStats;
+  $('loadTableBtn').onclick = loadTableView;
+
+  Promise.all([loadEnvironment(), refreshStats(), loadRelationships()]).catch(e => {
+    setStatus(e.message);
+    log('initial load failed', e.body || e.message);
+  });
+</script>
+</body>
+</html>
+
+
+
+
+
+
+

@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: neutral-delete-deadlock-lab-postgres
+    environment:
+      POSTGRES_DB: deadlock_lab
+      POSTGRES_USER: deadlock_lab
+      POSTGRES_PASSWORD: deadlock_lab
+    ports:
+      - "15432:5432"
+    volumes:
+      - postgres-16-lab-data:/var/lib/postgresql/data
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: neutral-delete-deadlock-lab-mssql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Your_strong_password_123"
+    ports:
+      - "14333:1433"
+    volumes:
+      - mssql-data:/var/opt/mssql
+
+  oracle:
+    image: gvenzl/oracle-free:23-slim
+    container_name: neutral-delete-deadlock-lab-oracle
+    environment:
+      ORACLE_PASSWORD: oracle
+      APP_USER: deadlock_lab
+      APP_USER_PASSWORD: deadlock_lab
+    ports:
+      - "1521:1521"
+    volumes:
+      - oracle-23-data:/opt/oracle/oradata
+
+volumes:
+  postgres-16-lab-data:
+  mssql-data:
+  oracle-23-data:
+
+
+
+
+
+
+
+
