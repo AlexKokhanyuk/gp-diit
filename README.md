@@ -1,416 +1,252 @@
 # Subject Deletion Deadlock Lab
 
-Окремий Spring Boot стенд для моделювання deadlock під час видалення суб'єктів. Тут зібрані FK-зв'язки, порядок `DELETE`, індекси та гарячі місця, які потрібні для дослідження блокувань.
+Spring Boot стенд для моделювання deadlock під час видалення сутності з великою кількістю пов'язаних таблиць.
 
-Проект лежить у `D:\home\Learn\gp-diit`.
+Проект створений для дипломної роботи: він відтворює типову проблему видалення "клієнта" з production-системи, але використовує нейтральні назви таблиць і колонок. Основна мета - дослідити, як порядок DELETE, індекси, розмір транзакції та паралельні запити впливають на блокування у різних СУБД.
 
-Потрібна Java 17+. Скрипти автоматично виставляють JAVA_HOME на локальний JDK 17, якщо він встановлений у C:\Java\jdk-17.0.0.1.
+## Вимоги
 
-## 1. Карта Запусків
+- Java 17.
+- Maven 3.8+.
+- Docker Desktop, якщо запускаються контейнерні PostgreSQL, SQL Server або Oracle.
 
-У стенда є 7 варіантів запуску:
-
-| N | Варіант | Профіль | Для чого |
-| --- | --- | --- | --- |
-| 1 | H2 файлова БД | `h2` | швидко перевірити UI/API без Docker |
-| 2 | PostgreSQL у Docker | `postgresql` | ізольований PostgreSQL-експеримент |
-| 3 | SQL Server у Docker | `mssql` | основний рекомендований сценарій для deadlock |
-| 4 | Oracle у Docker | `oracle` | ізольований Oracle-експеримент |
-| 5 | PostgreSQL real/test server | `postgresql-real` | перевірка на реальному тестовому PostgreSQL |
-| 6 | SQL Server real/test server | `mssql-real` | перевірка на реальному тестовому SQL Server |
-| 7 | Oracle real/test server | `oracle-real` | перевірка на реальному тестовому Oracle |
-
-Порядок роботи краще такий:
-
-1. Почати з **SQL Server у Docker**.
-2. Перевірити сценарій через Web UI.
-3. Повторити на PostgreSQL/Oracle Docker, якщо потрібно порівняти СУБД.
-4. Лише після цього переходити до `*-real` профілів.
-
-## 2. Запуск Через `.bat` Без PowerShell
-
-Найпростіший спосіб запуску — подвійний клік по потрібному `.bat` у корені проекту або запуск з `cmd`.
-
-Основні варіанти:
-
-```cmd
-run-h2.bat
-run-postgresql-docker.bat
-run-mssql-docker.bat
-run-oracle-docker.bat
-run-postgresql-real.bat
-run-mssql-real.bat
-run-oracle-real.bat
-```
-
-Запуск з IDEA через Maven:
-
-1. Відкрити Maven tool window.
-2. Увімкнути один із profiles: `run-h2`, `run-postgresql`, `run-mssql`, `run-oracle`, `run-postgresql-real`, `run-mssql-real`, `run-oracle-real`.
-3. Запустити goal `spring-boot:run`.
-
-Те саме з командного рядка:
-
-```cmd
-mvn -Prun-h2 spring-boot:run
-mvn -Prun-mssql spring-boot:run
-```
-
-Службові дії:
-
-```cmd
-build.bat
-reset-h2.bat
-bootstrap-real-databases.bat
-```
-
-`run-mssql-docker.bat` — рекомендований перший запуск для deadlock-дослідження. Він сам піднімає контейнер SQL Server, створює БД `deadlock_lab`, запускає застосунок; UI буде доступний на:
+Після старту застосунок доступний тут:
 
 ```text
 http://localhost:8080/
 ```
-## 3. Рекомендований Перший Запуск: SQL Server У Docker
 
-Це основний сценарій для дослідження deadlock: БД ізольована, її можна безпечно пересоздавати, ламати індекси й повторювати експерименти.
+## Швидкий Запуск
 
-Запусти через `.bat`:
+Перейти в каталог проекту:
 
-```cmd
+```bat
 cd /d D:\home\Learn\gp-diit
+```
+
+Запустити один з готових сценаріїв:
+
+```bat
+run-h2.bat
 run-mssql-docker.bat
-```
-
-Скрипт робить усе послідовно:
-
-1. Підіймає контейнер `mssql`.
-2. Чекає, поки SQL Server готовий приймати підключення.
-3. Створює БД `deadlock_lab`, якщо її ще немає.
-4. Запускає застосунок з профілем `mssql`.
-5. Flyway автоматично створює таблиці та індекси.
-
-Після старту відкрий:
-
-```text
-http://localhost:8080/
-```
-
-## 4. Робота Через Web UI
-
-На сторінці `http://localhost:8080/` є всі основні дії без Postman:
-
-- створення тестових даних;
-- видалення одного суб'єкта;
-- паралельне видалення кількох суб'єктів;
-- режим `LEGACY` або `DIRECT_LEDGERS`;
-- `lock=true/false`;
-- пауза після конкретного delete-step;
-- статистика по таблицях;
-- останній результат операції та помилки.
-
-Типовий ручний сценарій:
-
-1. У блоці `Seed Data` поставити, наприклад, `Subjects = 20`, `Fanout = 20`, `Reset = true`.
-   (Fanout тут означає “скільки залежних наборів даних створити для одного клієнта/subject”.)
-2. Натиснути `Create Test Data`.
-3. Скопійовані `subjectIds` автоматично з'являться в `Parallel Delete`.
-4. Встановити `Threads = 5` або більше.
-5. Натиснути `Run Parallel Delete`.
-6. Дивитися `Last Operation`, `Raw Output` і `Database Snapshot`.
-
-## 5. Усі Варіанти Запуску
-
-### 5.1 H2: Швидка Перевірка Без Docker
-
-H2 не дуже корисний для реального deadlock-дослідження, але швидко перевіряє UI та порядок delete.
-
-```powershell
-cd D:\home\Learn\gp-diit
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-local-low-memory.ps1 -Profile h2
-```
-
-Після старту:
-
-```text
-http://localhost:8080/
-```
-
-H2 console:
-
-```text
-http://localhost:8080/h2-console
-```
-
-JDBC URL:
-
-```text
-jdbc:h2:file:./data/deadlock-lab;MODE=MSSQLServer;DATABASE_TO_UPPER=false;NON_KEYWORDS=access_keys,org_positions;LOCK_TIMEOUT=10000
-```
-
-### 5.2 PostgreSQL У Docker
-
-```bat
-cd D:\home\Learn\gp-diit
 run-postgresql-docker.bat
-```
-
-PostgreSQL контейнер сам створює БД `deadlock_lab` і користувача `deadlock_lab/deadlock_lab`. Docker-профіль використовує порт `15432`, щоб не конфліктувати з локальним або реальним PostgreSQL на `5432`, і запускається з `UTC`, щоб PostgreSQL не падав на Windows/JVM timezone `Europe/Kiev`.
-
-### 5.3 SQL Server У Docker
-
-Короткий рекомендований варіант:
-
-```powershell
-cd D:\home\Learn\gp-diit
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-mssql-docker.ps1
-```
-
-Те саме вручну по кроках:
-
-```powershell
-cd D:\home\Learn\gp-diit
-docker compose up -d mssql
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap-docker-databases.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-local-low-memory.ps1 -Profile mssql
-```
-
-SQL Server контейнер не створює application database автоматично, тому bootstrap спочатку чекає готовності сервера і створює БД `deadlock_lab`.
-
-### 5.4 Oracle У Docker
-
-Простіше запускати через bat:
-
-```bat
-cd D:\home\Learn\gp-diit
 run-oracle-docker.bat
 ```
 
-Docker-варіант використовує Oracle Free 23 (`gvenzl/oracle-free:23-slim`). Для Oracle у проєкті підключений окремий Flyway database module, тому помилки типу `Unsupported Database: Oracle 23.0` бути не повинно.
+`H2` не потребує Docker. Інші три сценарії піднімають відповідний контейнер, чекають готовності БД і запускають застосунок з потрібним Spring profile. Структуру таблиць створює Flyway.
 
-Oracle image створює користувача `deadlock_lab/deadlock_lab`; підключення йде до service name `FREEPDB1`.
+## Варіанти Запуску
 
-### 5.5 Реальні Тестові Сервери
+| Сценарій | Команда | База даних | Призначення |
+| --- | --- | --- | --- |
+| H2 | `run-h2.bat` | локальна файлова H2 | швидка перевірка UI/API |
+| SQL Server Docker | `run-mssql-docker.bat` | `localhost:14333`, база `deadlock_lab` | основний стенд для MS SQL deadlock |
+| PostgreSQL Docker | `run-postgresql-docker.bat` | `localhost:15432`, база `deadlock_lab` | перевірка PostgreSQL |
+| Oracle Docker | `run-oracle-docker.bat` | `localhost:1521/FREEPDB1`, схема `DEADLOCK_LAB` | перевірка Oracle |
+| SQL Server real | `run-mssql-real.bat` | зовнішній SQL Server | запуск на підготовленій реальній БД |
+| PostgreSQL real | `run-postgresql-real.bat` | зовнішній PostgreSQL | запуск на підготовленій реальній БД |
+| Oracle real | `run-oracle-real.bat` | зовнішній Oracle | запуск на підготовленій реальній БД |
 
-Цей режим потрібен тільки після Docker-експериментів, коли треба перевірити поведінку на реальних тестових інстансах. Існуючі схеми `dev1`, `tester3`, `ORESCHENKO1` для таблиць стенда не використовуються.
+Ті самі режими доступні як Maven profiles, тому їх можна запускати з IDE:
 
-| СУБД | Ізольована область | Профіль |
-| --- | --- | --- |
-| PostgreSQL `127.0.0.1:5432/ibank` | schema `deadlock_lab` | `postgresql-real` |
-| SQL Server `192.168.88.91:1433` | database `deadlock_lab`, schema `lab`, user `deadlock_lab_user` | `mssql-real` |
-| Oracle `192.168.88.91:1521/orclpdb` | user/schema `DEADLOCK_LAB` | `oracle-real` |
-
-Спочатку створити окремі області та накотити Flyway:
-
-```powershell
-cd D:\home\Learn\gp-diit
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\bootstrap-real-databases.ps1 -Target all -Migrate -ConfirmRealServers
+```bat
+mvn -Prun-h2 spring-boot:run
+mvn -Prun-mssql-docker spring-boot:run
+mvn -Prun-postgresql-docker spring-boot:run
+mvn -Prun-oracle-docker spring-boot:run
+mvn -Prun-mssql-real spring-boot:run
+mvn -Prun-postgresql-real spring-boot:run
+mvn -Prun-oracle-real spring-boot:run
 ```
 
-Після цього запускати потрібний профіль:
+## Web UI
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-local-low-memory.ps1 -Profile postgresql-real
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-local-low-memory.ps1 -Profile mssql-real
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-local-low-memory.ps1 -Profile oracle-real
+Головна сторінка містить кілька робочих блоків.
+
+**Seed Data** створює тестові дані.
+
+- `Subjects` - кількість головних сутностей.
+- `Fanout` - кількість пов'язаних записів на одну головну сутність у кожній дочірній групі.
+- `Reset` - очистити поточні дані перед заповненням.
+- `Deadlock preset` - встановлює параметри для більш щільного набору даних.
+
+**Single Delete** виконує один запит:
+
+```http
+DELETE /lab/subjects/{id}
 ```
 
-`-ConfirmRealServers` навмисно обов'язковий, щоб випадково не підключитися до shared-серверів.
+**Parallel Delete** приймає список ID і відправляє з браузера окремий DELETE-запит для кожного ID. Поле `Threads` задає кількість одночасних запитів з фронту.
 
-## 6. API Якщо Все Ж Таки Потрібен HTTP
+Цей режим потрібен, щоб моделювати реальну ситуацію: користувач вибирає кілька об'єктів, а фронт відправляє кілька незалежних видалень майже одночасно.
 
-UI викликає ці endpoint-и. Блок `Table Viewer` показує перші рядки вибраної таблиці з whitelist-списку статистики; `limit` обмежено до 500 рядків.
+**Database Snapshot** показує кількість основних сутностей, загальну кількість рядків і діапазон ID.
+
+**Table Viewer** дозволяє переглянути вміст будь-якої таблиці зі стенду.
+
+**Last Operation** показує результат останнього запуску.
+
+**Raw Output** містить повну JSON-відповідь останньої операції.
+
+## API
+
+Створити тестові дані:
 
 ```http
 POST /lab/seed?subjects=10&fanout=5&reset=true
+```
+
+Видалити одну сутність:
+
+```http
+DELETE /lab/subjects/{subjectId}
+```
+
+Отримати статистику:
+
+```http
 GET /lab/stats
+```
+
+Переглянути таблицю:
+
+```http
+GET /lab/table/{tableName}?limit=50
+```
+
+Отримати опис зв'язків:
+
+```http
 GET /lab/relationships
-GET /lab/table/{table}?limit=50
-DELETE /lab/subjects/{subjectId}?mode=LEGACY
-POST /lab/delete-parallel    # допоміжний backend endpoint, UI для масового видалення його не використовує
 ```
 
-Масове видалення у Web UI навмисно реалізоване як багато окремих HTTP-запитів:
+Технічний endpoint для серверного паралельного запуску також залишений у проекті:
 
 ```http
-DELETE /lab/subjects/1001?mode=LEGACY
-DELETE /lab/subjects/1002?mode=LEGACY
-DELETE /lab/subjects/1003?mode=LEGACY
+POST /lab/delete-parallel
 ```
 
-Поле `Threads` у UI обмежує, скільки таких одиночних запитів браузер тримає одночасно. Це ближче до реальної проблеми: бекенд отримує незалежні одиночні delete-запити, а не один batch-виклик.
+У звичайному UI-сценарії він не використовується: фронт відправляє окремі DELETE-запити самостійно.
 
-Допоміжний backend endpoint `/lab/delete-parallel` залишений для технічних експериментів, але основний UI його не викликає.
+## Модель Даних
 
-Режими:
+Головна таблиця:
 
-- `LEGACY` — ближче до старого коду, включно з self-subquery для `ledger_accounts`;
-- `DIRECT_LEDGERS` — фінальний delete з `ledger_accounts` напряму по `subject_id`.
-
-Додаткові параметри delete:
-
-```http
-pauseAfterStep=ledger_accounts:user_ledgers&pauseMs=5000&lock=true
+```text
+subjects
 ```
-
-Цікаві кроки для пауз:
-
-- `ledger_accounts:user_ledgers`
-- `user_accounts:user_ledgers`
-- `user_accounts:key_events`
-- `deleteLoans:loan_contracts`
-- `subjectTable:subjects`
-
-### 6.1 MSSQL Stress-Сценарій
-
-Якщо паралельне видалення проходить без deadlock, найчастіше причина проста: мало рядків, транзакції завершуються занадто швидко і майже не перетинаються.
-
-У Web UI є кнопка `MS deadlock preset`. Вона виставляє такі параметри:
-
-- seed: `subjects=24`, `fanout=120`, `reset=true`;
-- parallel delete: `threads=12`;
-- mode: `LEGACY`;
-- lock: `false`;
-- pause: `pauseAfterStep=ledger_accounts:user_ledgers`, `pauseMs=3000`.
-
-Порядок перевірки:
-
-1. Натиснути `MS deadlock preset`.
-2. Натиснути `Create Test Data`.
-3. Натиснути `Run Parallel Delete`.
-4. Якщо deadlock не з'явився, збільшити `fanout` до `200` або `threads` до `16`.
-
-Якщо навіть на великому fanout deadlock не відтворюється, це теж важливий результат: індекси та однаковий порядок видалення можуть прибрати головну причину взаємних блокувань. Для дипломної роботи це можна показати як порівняння: малий набір, великий набір, великий набір з паузою, великий набір із серіалізацією через lock.
-
-## 7. Що Змодельовано
-
-Коренева таблиця:
-
-- `subjects`
 
 Основні групи залежностей:
 
-- agents: `partner_agents`, `agent_cards`;
-- users/keys: `user_accounts`, `access_keys`, `key_events`, `key_profiles`, `permission_events`, `mobile_links`, `user_login_attempts`, `key_requests`, `hardware_tokens`;
-- ledgers/cards: `ledger_accounts`, `primary_ledgers`, `ledger_operations`, `ledger_snapshots`, `user_ledgers`, `payment_plastics`, `plastic_limits`, `plastic_snapshots`, `plastic_operations`, `plastic_ledgers`;
-- loans: `loan_contracts`, `loan_schedules`, `loan_debt_snapshots`, `loan_operations`, `loan_rate_events`, `loan_segments`;
-- savings: `savings_contracts`, `savings_ledgers`, `savings_operations`, `savings_rate_events`;
-- documents: `inbox_messages`, `payroll_batches`, `payroll_slips`, `savings_open_requests`, `card_open_requests`, `payment_rule_create_requests`, `payment_rule_stop_requests`, `transfer_requests`, `currency_payment_requests`, `delivery_rejects`, `card_funding_deliveries`, `document_events`, `document_recipients`, `savings_documents`;
-- final subject tables: `merchant_sites`, `subject_operation_links`, `network_rules`, `admin_subject_links`, `document_watchers`, `session_windows`, `org_positions`, `budget_items`, `payment_recipients`, `approved_recipients`, `beneficiary_profiles`, `message_links`, `subject_properties`, `corporate_recipients`, `mobile_recipients`, `trusted_payment_caps`, `currency_agents`.
+- прямі дочірні таблиці головної сутності;
+- користувачі та їхні дочірні записи;
+- ключі та історія ключів;
+- рахунки, ліміти, операції та журнали;
+- документи та супутні таблиці;
+- таблиці з підзапитами, які спеціально залишені для моделювання складних DELETE.
 
-FK зроблені без `ON DELETE CASCADE`, щоб сервіс видаляв усе вручну.
+Назви таблиць нейтральні. Вони описують роль у моделі, а не копіюють production-схему.
 
-## 8. Індекси
+## Міграції
 
-Основні індекси лежать у `V2__indexes.sql` для кожної БД.
-
-Hotspot-індекси:
-
-- `user_ledgers(user_id)`;
-- `key_events(key_id)`;
-- `ledger_accounts(subject_id)`;
-- `loan_contracts(subject_id)`;
-- `agent_cards(agent_id)`;
-- document tables by `subject_id`;
-- ledger child tables by `ledger_id`.
-
-Для експерименту з відсутніми індексами є файл:
+Flyway-міграції розділені за СУБД:
 
 ```text
-docs/drop_hotspot_indexes.sql
+src/main/resources/db/migration/h2
+src/main/resources/db/migration/mssql
+src/main/resources/db/migration/oracle
+src/main/resources/db/migration/postgresql
 ```
 
-Запускати його тільки на лабораторній БД.
+На старті застосунок сам застосовує міграції для активного profile.
 
-## 9. Типові Проблеми
+## Docker-Бази
 
-### SQL Server 2022 І Flyway
-
-SQL Server 2022 визначається JDBC як `Microsoft SQL Server 16.0`. Старий Flyway 8.5.13 зі Spring Boot 2.7.x його не підтримує і падає з помилкою:
+Контейнери описані в:
 
 ```text
-Unsupported Database: Microsoft SQL Server 16.0
+docker-compose.yml
 ```
 
-У `pom.xml` зафіксовано `java.version=17` і `flyway.version=9.22.3`, щоб Flyway підтримував SQL Server 2022. Для SQL Server також підключено окремий модуль `org.flywaydb:flyway-sqlserver`; без нього навіть Flyway 9.x може впасти з `Unsupported Database: Microsoft SQL Server 16.0`.
+Порти:
 
+| СУБД | Порт на хості | Користувач | База/схема |
+| --- | ---: | --- | --- |
+| PostgreSQL | `15432` | `deadlock_lab` | `deadlock_lab` |
+| SQL Server | `14333` | `sa` | `deadlock_lab` |
+| Oracle | `1521` | `DEADLOCK_LAB` | `DEADLOCK_LAB` |
 
-### Windows Блокує `.ps1`
+PostgreSQL використовує порт `15432`, щоб не конфліктувати з локальним PostgreSQL на стандартному `5432`.
 
-Якщо бачиш `выполнение сценариев отключено`, запускай скрипти так:
+## Реальні Бази
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-mssql-docker.ps1
-```
-
-Це не змінює системну політику Windows.
-
-### JVM Не Стартує Через Брак Пам'яті
-
-Помилка виглядає так:
+Для запуску на зовнішніх БД використовуються профілі:
 
 ```text
-There is insufficient memory for the Java Runtime Environment to continue.
-Native memory allocation failed
+mssql-real
+postgresql-real
+oracle-real
 ```
 
-Використовуй low-memory скрипти:
+Параметри підключення лежать у відповідних `application-*.yml`. Перед запуском на реальній БД потрібно мати окрему тестову базу або схему для цього стенду. Production-схеми використовувати не потрібно.
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\build-low-memory.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-jar-low-memory.ps1
+## Корисні Команди
+
+Зібрати проект:
+
+```bat
+build.bat
 ```
 
-Вони запускають JVM з параметрами:
+Скинути локальну H2-базу:
+
+```bat
+reset-h2.bat
+```
+
+Запустити без `.bat`:
+
+```bat
+mvn -Prun-h2 spring-boot:run
+```
+
+## Структура Коду
+
+Основні класи:
 
 ```text
--Xms32m -Xmx192m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC
+src/main/java/edu/diploma/deadlocklab/web/SubjectDeleteController.java
+src/main/java/edu/diploma/deadlocklab/delete/SubjectDeleteService.java
+src/main/java/edu/diploma/deadlocklab/seed/SeedService.java
+src/main/java/edu/diploma/deadlocklab/stats/StatsService.java
+src/main/java/edu/diploma/deadlocklab/bootstrap/DockerDatabaseBootstrap.java
 ```
 
-### H2 Не Стартує Через Flyway Checksum
-
-Помилка виглядає так:
+Фронт:
 
 ```text
-FlywayValidateException: Migration checksum mismatch
-Applied to database : ...
-Resolved locally    : ...
+src/main/resources/static/index.html
 ```
 
-Це означає, що `data/deadlock-lab.mv.db` створена старою версією міграцій. Для локального стенда пересоздай H2:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\reset-local-h2.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-local-low-memory.ps1 -Profile h2
-```
-
-Скрипт не видаляє стару БД назавжди, а переносить її у backup `*.bak`.
-
-### MSSQL: Cannot Open Database `deadlock_lab`
-
-Помилка:
+Конфігурації:
 
 ```text
-Cannot open database "deadlock_lab" requested by the login
+src/main/resources/application.yml
+src/main/resources/application-h2.yml
+src/main/resources/application-mssql.yml
+src/main/resources/application-postgresql.yml
+src/main/resources/application-oracle.yml
 ```
 
-Причина: застосунок стартував до створення БД або bootstrap не виконався. Найпростіше рішення:
+## Призначення Стенду
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\run-mssql-docker.ps1
-```
+Стенд дозволяє перевіряти:
 
-## 10. Де Дивитись Код
+- які таблиці створюють найбільший ризик блокувань;
+- як впливають відсутні або неправильні індекси;
+- як змінюється поведінка при паралельному видаленні;
+- чим відрізняються H2, PostgreSQL, SQL Server і Oracle;
+- чи зменшує проблему впорядкування DELETE-запитів;
+- чи потрібна черга, окремий endpoint або інша стратегія серіалізації видалень.
 
-- `SubjectDeleteService` — порядок видалення і SQL.
-- `SeedService` — генерація тестового графа даних.
-- `SubjectDeleteController` — HTTP API для UI та експериментів.
-- `src/main/resources/static/index.html` — простий фронт.
-- `src/main/resources/db/migration/*` — DDL та індекси для кожної БД.
-
-
-
-
-
-
-
-
-
+H2 підходить для швидкої функціональної перевірки. Для реального дослідження deadlock потрібно запускати SQL Server, PostgreSQL або Oracle.
